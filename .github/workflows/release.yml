@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project earth-backgrounds.xcodeproj \
+            -scheme earth-backgrounds \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package
+        run: |
+          cd build/Build/Products/Release
+          zip -r --symlinks EarthBackgrounds.zip earth-backgrounds.app
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Build/Products/Release/EarthBackgrounds.zip
+          generate_release_notes: true

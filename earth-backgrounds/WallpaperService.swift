@@ -1,5 +1,38 @@
 import AppKit
 import Foundation
+import ServiceManagement
+
+enum WallpaperError: LocalizedError {
+    case noImageFound
+
+    var errorDescription: String? {
+        "No Earth View image could be found after several attempts. Try again later."
+    }
+}
+
+struct ImageInfo: Codable {
+    let id: Int
+    let url: URL
+    let fetchedAt: Date
+    var title: String?
+    var country: String?
+    var region: String?
+    var lat: Double?
+    var lng: Double?
+    var mapsLink: String?
+}
+
+private struct EarthViewData: Decodable {
+    struct Geocode: Decodable {
+        let locality: String?
+        let administrative_area_level_1: String?
+        let country: String?
+    }
+    let geocode: Geocode?
+    let lat: Double?
+    let lng: Double?
+    let attribution: String?
+}
 
 enum RefreshInterval: TimeInterval, CaseIterable {
     case off           = 0
@@ -26,8 +59,9 @@ enum RefreshInterval: TimeInterval, CaseIterable {
 @MainActor
 class WallpaperService: ObservableObject {
     @Published var isLoading = false
-    @Published var currentID: Int?
+    @Published var currentInfo: ImageInfo?
     @Published var errorMessage: String?
+    @Published var launchAtLogin: Bool
     @Published var selectedInterval: RefreshInterval {
         didSet {
             UserDefaults.standard.set(selectedInterval.rawValue, forKey: "timerInterval")
@@ -44,6 +78,11 @@ class WallpaperService: ObservableObject {
     init() {
         let saved = UserDefaults.standard.double(forKey: "timerInterval")
         selectedInterval = RefreshInterval(rawValue: saved) ?? .off
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+        if let data = UserDefaults.standard.data(forKey: "currentImageInfo"),
+           let info = try? JSONDecoder().decode(ImageInfo.self, from: data) {
+            currentInfo = info
+        }
         scheduleTimer()
     }
 
@@ -56,14 +95,45 @@ class WallpaperService: ObservableObject {
             let (imageURL, id) = try await findRandomImageURL()
             let localURL = try await downloadImage(from: imageURL)
             try applyWallpaper(localURL)
-            currentID = id
+            var info = ImageInfo(id: id, url: imageURL, fetchedAt: Date())
+            if let meta = try? await fetchMetadata(id: id) {
+                info.title   = meta.geocode?.locality
+                info.region  = meta.geocode?.administrative_area_level_1
+                info.country = meta.geocode?.country
+                info.lat     = meta.lat
+                info.lng     = meta.lng
+                if let lat = meta.lat, let lng = meta.lng {
+                    info.mapsLink = "https://www.google.com/maps/@\(lat),\(lng),14z"
+                }
+            }
+            currentInfo = info
+            if let data = try? JSONEncoder().encode(info) {
+                UserDefaults.standard.set(data, forKey: "currentImageInfo")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func clearCache() {
-        try? FileManager.default.removeItem(at: cacheDir)
+        do {
+            try FileManager.default.removeItem(at: cacheDir)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     private func scheduleTimer() {
@@ -75,6 +145,12 @@ class WallpaperService: ObservableObject {
                 await self?.setRandomBackground()
             }
         }
+    }
+
+    private func fetchMetadata(id: Int) async throws -> EarthViewData {
+        let url = URL(string: "https://www.gstatic.com/prettyearth/assets/data/\(id).json")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try JSONDecoder().decode(EarthViewData.self, from: data)
     }
 
     // Google Earth View images (gstatic.com) — IDs in the ~1000–8000 range
@@ -89,7 +165,7 @@ class WallpaperService: ObservableObject {
                 return (url, id)
             }
         }
-        throw URLError(.cannotFindHost)
+        throw WallpaperError.noImageFound
     }
 
     private func downloadImage(from url: URL) async throws -> URL {
@@ -112,7 +188,7 @@ class WallpaperService: ObservableObject {
             options: .skipsHiddenFiles
         )
         guard files.count > 10 else { return }
-        let sorted = try files.sorted {
+        let sorted = files.sorted {
             let a = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
             let b = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
             return a < b
