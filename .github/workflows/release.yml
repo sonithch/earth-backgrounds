@@ -28,10 +28,16 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Sign (ad-hoc)
+        run: |
+          codesign --force --deep --sign - \
+            build/Build/Products/Release/earth-backgrounds.app
+
       - name: Package
         run: |
-          cd build/Build/Products/Release
-          zip -r --symlinks EarthBackgrounds.zip earth-backgrounds.app
+          ditto -c -k --keepParent \
+            build/Build/Products/Release/earth-backgrounds.app \
+            build/Build/Products/Release/EarthBackgrounds.zip
 
       - name: Create release
         uses: softprops/action-gh-release@v2
