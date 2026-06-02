@@ -18,7 +18,12 @@ struct MouseExitTracker: NSViewRepresentable {
             ))
         }
 
-        override func mouseExited(with event: NSEvent) { window?.close() }
+        override func mouseExited(with event: NSEvent) {
+            // Don't close if the cursor moved into a child popup (e.g. Picker menu)
+            let mousePoint = NSEvent.mouseLocation
+            let inAppWindow = NSApp.windows.contains { $0.isVisible && $0.frame.contains(mousePoint) }
+            if !inAppWindow { window?.close() }
+        }
     }
 }
 
@@ -89,7 +94,7 @@ struct InfoRow: View {
 // MARK: - Views
 
 struct HomeView: View {
-    @ObservedObject var service: WallpaperService
+    @EnvironmentObject private var service: WallpaperService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -148,7 +153,7 @@ struct HomeView: View {
 }
 
 struct InfoView: View {
-    @ObservedObject var service: WallpaperService
+    @EnvironmentObject private var service: WallpaperService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -160,8 +165,8 @@ struct InfoView: View {
                             .foregroundStyle(.primary)
                     }
 
-                    if let country = info.country {
-                        let place = [info.region, country].compactMap { $0 }.joined(separator: ", ")
+                    let place = [info.region, info.country].compactMap { $0 }.joined(separator: ", ")
+                    if !place.isEmpty {
                         Text(place)
                             .foregroundStyle(.secondary)
                     }
@@ -208,7 +213,7 @@ struct InfoView: View {
 // MARK: - Root
 
 struct ContentView: View {
-    @StateObject private var service = WallpaperService()
+    @EnvironmentObject private var service: WallpaperService
     @State private var showInfo = false
 
     var body: some View {
@@ -231,9 +236,9 @@ struct ContentView: View {
             Divider()
 
             if showInfo {
-                InfoView(service: service)
+                InfoView()
             } else {
-                HomeView(service: service)
+                HomeView()
             }
 
             Divider()

@@ -31,7 +31,6 @@ private struct EarthViewData: Decodable {
     let geocode: Geocode?
     let lat: Double?
     let lng: Double?
-    let attribution: String?
 }
 
 enum RefreshInterval: TimeInterval, CaseIterable {
@@ -87,16 +86,20 @@ class WallpaperService: ObservableObject {
     }
 
     func setRandomBackground() async {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
             let (imageURL, id) = try await findRandomImageURL()
+            // Fetch metadata concurrently with the image download
+            async let metaTask = fetchMetadata(id: id)
             let localURL = try await downloadImage(from: imageURL)
             try applyWallpaper(localURL)
+
             var info = ImageInfo(id: id, url: imageURL, fetchedAt: Date())
-            if let meta = try? await fetchMetadata(id: id) {
+            if let meta = try? await metaTask {
                 info.title   = meta.geocode?.locality
                 info.region  = meta.geocode?.administrative_area_level_1
                 info.country = meta.geocode?.country
@@ -118,6 +121,8 @@ class WallpaperService: ObservableObject {
     func clearCache() {
         do {
             try FileManager.default.removeItem(at: cacheDir)
+            currentInfo = nil
+            UserDefaults.standard.removeObject(forKey: "currentImageInfo")
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -153,19 +158,28 @@ class WallpaperService: ObservableObject {
         return try JSONDecoder().decode(EarthViewData.self, from: data)
     }
 
-    // Google Earth View images (gstatic.com) — IDs in the ~1000–8000 range
+    // Probes 5 random IDs concurrently; returns the first that responds 200
     private func findRandomImageURL() async throws -> (URL, Int) {
-        for _ in 0..<10 {
-            let id = Int.random(in: 1000...8000)
-            let url = URL(string: "https://www.gstatic.com/prettyearth/assets/full/\(id).jpg")!
-            var request = URLRequest(url: url)
-            request.httpMethod = "HEAD"
-            if let (_, response) = try? await URLSession.shared.data(for: request),
-               (response as? HTTPURLResponse)?.statusCode == 200 {
-                return (url, id)
+        try await withThrowingTaskGroup(of: (URL, Int)?.self) { group in
+            for _ in 0..<5 {
+                let id = Int.random(in: 1000...8000)
+                let url = URL(string: "https://www.gstatic.com/prettyearth/assets/full/\(id).jpg")!
+                group.addTask {
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "HEAD"
+                    guard let (_, response) = try? await URLSession.shared.data(for: request),
+                          (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+                    return (url, id)
+                }
             }
+            for try await result in group {
+                if let found = result {
+                    group.cancelAll()
+                    return found
+                }
+            }
+            throw WallpaperError.noImageFound
         }
-        throw WallpaperError.noImageFound
     }
 
     private func downloadImage(from url: URL) async throws -> URL {
@@ -174,7 +188,12 @@ class WallpaperService: ObservableObject {
 
         if !FileManager.default.fileExists(atPath: dest.path) {
             let (tmp, _) = try await URLSession.shared.download(from: url)
-            try FileManager.default.moveItem(at: tmp, to: dest)
+            do {
+                try FileManager.default.moveItem(at: tmp, to: dest)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                // A concurrent download already wrote this file; discard our copy
+                try? FileManager.default.removeItem(at: tmp)
+            }
         }
 
         try pruneCache()
