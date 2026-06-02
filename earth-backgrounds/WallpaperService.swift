@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import ServiceManagement
 
+// MARK: - Errors
+
 enum WallpaperError: LocalizedError {
     case noImageFound
 
@@ -9,6 +11,8 @@ enum WallpaperError: LocalizedError {
         "No Earth View image could be found after several attempts. Try again later."
     }
 }
+
+// MARK: - Models
 
 struct ImageInfo: Codable {
     let id: Int
@@ -20,9 +24,23 @@ struct ImageInfo: Codable {
     var lat: Double?
     var lng: Double?
     var mapsLink: String?
+
+    init(id: Int, url: URL, meta: EarthViewData?) {
+        self.id        = id
+        self.url       = url
+        self.fetchedAt = Date()
+        self.title     = meta?.geocode?.locality
+        self.region    = meta?.geocode?.administrative_area_level_1
+        self.country   = meta?.geocode?.country
+        self.lat       = meta?.lat
+        self.lng       = meta?.lng
+        if let lat = meta?.lat, let lng = meta?.lng {
+            self.mapsLink = "https://www.google.com/maps/@\(lat),\(lng),14z"
+        }
+    }
 }
 
-private struct EarthViewData: Decodable {
+struct EarthViewData: Decodable {
     struct Geocode: Decodable {
         let locality: String?
         let administrative_area_level_1: String?
@@ -32,6 +50,15 @@ private struct EarthViewData: Decodable {
     let lat: Double?
     let lng: Double?
 }
+
+private struct PrefetchedWallpaper {
+    let localURL: URL
+    let id: Int
+    let imageURL: URL
+    let meta: EarthViewData?
+}
+
+// MARK: - Refresh interval
 
 enum RefreshInterval: TimeInterval, CaseIterable {
     case off           = 0
@@ -55,6 +82,8 @@ enum RefreshInterval: TimeInterval, CaseIterable {
     }
 }
 
+// MARK: - Service
+
 @MainActor
 class WallpaperService: ObservableObject {
     @Published var isLoading = false
@@ -63,22 +92,31 @@ class WallpaperService: ObservableObject {
     @Published var launchAtLogin: Bool
     @Published var selectedInterval: RefreshInterval {
         didSet {
-            UserDefaults.standard.set(selectedInterval.rawValue, forKey: "timerInterval")
+            UserDefaults.standard.set(selectedInterval.rawValue, forKey: Keys.timerInterval)
             scheduleTimer()
         }
     }
 
     private var timer: Timer?
+    private var prefetchTask: Task<Void, Never>?
+    private var prefetchBuffer: [PrefetchedWallpaper] = []
+    private let prefetchBufferSize = 2
+
     private let cacheDir: URL = {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return caches.appendingPathComponent("earth-backgrounds")
     }()
 
+    private enum Keys {
+        static let timerInterval   = "timerInterval"
+        static let currentImageInfo = "currentImageInfo"
+    }
+
     init() {
-        let saved = UserDefaults.standard.double(forKey: "timerInterval")
+        let saved = UserDefaults.standard.double(forKey: Keys.timerInterval)
         selectedInterval = RefreshInterval(rawValue: saved) ?? .off
         launchAtLogin = SMAppService.mainApp.status == .enabled
-        if let data = UserDefaults.standard.data(forKey: "currentImageInfo"),
+        if let data = UserDefaults.standard.data(forKey: Keys.currentImageInfo),
            let info = try? JSONDecoder().decode(ImageInfo.self, from: data) {
             currentInfo = info
         }
@@ -92,37 +130,47 @@ class WallpaperService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let (imageURL, id) = try await findRandomImageURL()
-            // Fetch metadata concurrently with the image download
-            async let metaTask = fetchMetadata(id: id)
-            let localURL = try await downloadImage(from: imageURL)
+            let localURL: URL
+            let id: Int
+            let imageURL: URL
+            let meta: EarthViewData?
+
+            if !prefetchBuffer.isEmpty {
+                let p = prefetchBuffer.removeFirst()
+                localURL = p.localURL
+                id       = p.id
+                imageURL = p.imageURL
+                meta     = p.meta
+            } else {
+                let (imgURL, imgID) = try await findRandomImageURL()
+                async let metaTask = fetchMetadata(id: imgID)
+                localURL = try await downloadImage(from: imgURL)
+                id       = imgID
+                imageURL = imgURL
+                meta     = try? await metaTask
+            }
+
             try applyWallpaper(localURL)
 
-            var info = ImageInfo(id: id, url: imageURL, fetchedAt: Date())
-            if let meta = try? await metaTask {
-                info.title   = meta.geocode?.locality
-                info.region  = meta.geocode?.administrative_area_level_1
-                info.country = meta.geocode?.country
-                info.lat     = meta.lat
-                info.lng     = meta.lng
-                if let lat = meta.lat, let lng = meta.lng {
-                    info.mapsLink = "https://www.google.com/maps/@\(lat),\(lng),14z"
-                }
-            }
+            let info = ImageInfo(id: id, url: imageURL, meta: meta)
             currentInfo = info
             if let data = try? JSONEncoder().encode(info) {
-                UserDefaults.standard.set(data, forKey: "currentImageInfo")
+                UserDefaults.standard.set(data, forKey: Keys.currentImageInfo)
             }
+
+            startPrefetch()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func clearCache() {
+        prefetchTask?.cancel()
+        prefetchBuffer.removeAll()
         do {
             try FileManager.default.removeItem(at: cacheDir)
             currentInfo = nil
-            UserDefaults.standard.removeObject(forKey: "currentImageInfo")
+            UserDefaults.standard.removeObject(forKey: Keys.currentImageInfo)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -144,10 +192,31 @@ class WallpaperService: ObservableObject {
     private func scheduleTimer() {
         timer?.invalidate()
         timer = nil
+        prefetchTask?.cancel()
+        prefetchBuffer.removeAll()
+
         guard selectedInterval != .off else { return }
+
+        startPrefetch()
         timer = Timer.scheduledTimer(withTimeInterval: selectedInterval.rawValue, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.setRandomBackground()
+            }
+        }
+    }
+
+    // Fills the prefetch buffer in the background; retries each slot on failure
+    private func startPrefetch() {
+        prefetchTask?.cancel()
+        prefetchTask = Task {
+            while prefetchBuffer.count < prefetchBufferSize {
+                guard !Task.isCancelled else { return }
+                guard let (imageURL, id) = try? await findRandomImageURL() else { continue }
+                async let metaTask = fetchMetadata(id: id)
+                guard let localURL = try? await downloadImage(from: imageURL) else { continue }
+                let meta = try? await metaTask
+                guard !Task.isCancelled else { return }
+                prefetchBuffer.append(PrefetchedWallpaper(localURL: localURL, id: id, imageURL: imageURL, meta: meta))
             }
         }
     }
@@ -191,7 +260,6 @@ class WallpaperService: ObservableObject {
             do {
                 try FileManager.default.moveItem(at: tmp, to: dest)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
-                // A concurrent download already wrote this file; discard our copy
                 try? FileManager.default.removeItem(at: tmp)
             }
         }

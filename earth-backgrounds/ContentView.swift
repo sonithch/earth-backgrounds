@@ -159,19 +159,13 @@ struct InfoView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let info = service.currentInfo {
                 VStack(alignment: .leading, spacing: 8) {
-                    if let title = info.title {
-                        Text(title)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.primary)
-                    }
-
-                    let place = [info.region, info.country].compactMap { $0 }.joined(separator: ", ")
+                    let place = [info.title, info.region, info.country].compactMap { $0 }.joined(separator: ", ")
                     if !place.isEmpty {
                         Text(place)
-                            .foregroundStyle(.secondary)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+                        Divider().padding(.vertical, 2)
                     }
-
-                    Divider().padding(.vertical, 2)
 
                     if let lat = info.lat, let lng = info.lng {
                         InfoRow(label: "Coords", value: coordString(lat, lng))

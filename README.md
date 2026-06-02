@@ -1,26 +1,38 @@
 # Earth Backgrounds
 
-A minimal macOS menu bar app that sets stunning Google Earth View satellite images as your desktop wallpaper.
+> A minimal macOS menu bar app that sets stunning Google Earth View satellite images as your desktop wallpaper — automatically.
 
-## Download
+![macOS](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+![Swift](https://img.shields.io/badge/Swift-5-orange?logo=swift)
+![License](https://img.shields.io/github/license/sonith/earth-backgrounds)
+![Release](https://img.shields.io/github/v/release/sonith/earth-backgrounds)
 
-**[→ Download latest release](../../releases/latest)**
-
-Unzip and drag `earth-backgrounds.app` to your Applications folder.
-
-> **First launch:** macOS may block the app since it isn't notarized. Right-click the app → **Open** → **Open** to bypass Gatekeeper once.
+---
 
 ## Features
 
-- Sets a random Google Earth View satellite image as your wallpaper
-- Auto-refresh on a timer (15 min → 1 day)
-- Image info: location, coordinates, link to Google Maps
-- Launch at login
-- Caches up to 10 images locally
+- **Random wallpaper** — fetches a beautiful satellite image from Google Earth View with one click
+- **Auto-refresh** — change your wallpaper every 15 min, 30 min, 1 hour, 3 hours, 6 hours, or daily
+- **Image info** — see the location name, region, coordinates, and a direct link to Google Maps
+- **Launch at login** — starts silently in the menu bar when you log in
+- **Local cache** — keeps the last 10 images on disk so changes are instant on repeat
 
-## Requirements
+---
 
-- macOS 13 Ventura or later
+## Download
+
+**[→ Download latest release](https://github.com/sonith/earth-backgrounds/releases/latest)**
+
+1. Unzip the download
+2. Drag `earth-backgrounds.app` to your **Applications** folder
+3. Launch it — the globe icon appears in your menu bar
+
+> **First launch:** macOS may warn that the app isn't notarized.
+> Right-click the app → **Open** → **Open** to approve it once.
+
+**Requires macOS 13 Ventura or later.**
+
+---
 
 ## Build from source
 
@@ -30,8 +42,10 @@ cd earth-backgrounds
 open earth-backgrounds.xcodeproj
 ```
 
-Then build and run with **⌘R** in Xcode.
+Press **⌘R** in Xcode to build and run.
+
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
