@@ -4,8 +4,8 @@
 
 ![macOS](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5-orange?logo=swift)
-![License](https://img.shields.io/github/license/sonith/earth-backgrounds)
-![Release](https://img.shields.io/github/v/release/sonith/earth-backgrounds)
+![License](https://img.shields.io/github/license/sonithch/earth-backgrounds)
+![Release](https://img.shields.io/github/v/release/sonithch/earth-backgrounds)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## Download
 
-**[→ Download latest release](https://github.com/sonith/earth-backgrounds/releases/latest)**
+**[→ Download latest release](https://github.com/sonithch/earth-backgrounds/releases/latest)**
 
 1. Unzip the download
 2. Drag `earth-backgrounds.app` to your **Applications** folder
@@ -37,7 +37,7 @@
 ## Build from source
 
 ```bash
-git clone https://github.com/sonith/earth-backgrounds.git
+git clone https://github.com/sonithch/earth-backgrounds.git
 cd earth-backgrounds
 open earth-backgrounds.xcodeproj
 ```
