@@ -33,14 +33,20 @@ jobs:
           codesign --force --deep --sign - \
             build/Build/Products/Release/earth-backgrounds.app
 
-      - name: Package
+      - name: Package DMG
         run: |
-          ditto -c -k --keepParent \
-            build/Build/Products/Release/earth-backgrounds.app \
-            build/Build/Products/Release/EarthBackgrounds.zip
+          APP=build/Build/Products/Release/earth-backgrounds.app
+          STAGING=$(mktemp -d)
+          cp -R "$APP" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "Earth Backgrounds" \
+            -srcfolder "$STAGING" \
+            -ov -format UDZO \
+            build/Build/Products/Release/EarthBackgrounds.dmg
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Build/Products/Release/EarthBackgrounds.zip
+          files: build/Build/Products/Release/EarthBackgrounds.dmg
           generate_release_notes: true

@@ -23,9 +23,9 @@
 
 **[→ Download latest release](https://github.com/sonithch/earth-backgrounds/releases/latest)**
 
-1. Unzip the download
-2. Drag `earth-backgrounds.app` to your **Applications** folder
-3. Launch it — the globe icon appears in your menu bar
+1. Open the `.dmg`
+2. Drag **Earth Backgrounds** into the **Applications** folder
+3. Eject the disk image and launch the app — the globe icon appears in your menu bar
 
 > **First launch:** macOS may warn that the app isn't notarized.
 > Right-click the app → **Open** → **Open** to approve it once.
