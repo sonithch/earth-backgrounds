@@ -159,7 +159,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.sonith.earth-backgrounds";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Earth Backgrounds";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -183,7 +183,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.sonith.earth-backgrounds";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Earth Backgrounds";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 5.0;

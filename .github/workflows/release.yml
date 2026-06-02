@@ -31,11 +31,11 @@ jobs:
       - name: Sign (ad-hoc)
         run: |
           codesign --force --deep --sign - \
-            build/Build/Products/Release/earth-backgrounds.app
+            build/Build/Products/Release/Earth Backgrounds.app
 
       - name: Package DMG
         run: |
-          APP=build/Build/Products/Release/earth-backgrounds.app
+          APP=build/Build/Products/Release/Earth Backgrounds.app
           STAGING=$(mktemp -d)
           cp -R "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
